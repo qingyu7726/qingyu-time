@@ -1,0 +1,1196 @@
+/* ============================================================
+   沉浸式时钟 — Immersive Clock
+   CSS Custom Properties
+   ============================================================ */
+:root {
+    --bg: #0a0e1a;
+    --bg-card: rgba(255, 255, 255, 0.03);
+    --bg-card-hover: rgba(255, 255, 255, 0.06);
+    --border: rgba(255, 255, 255, 0.08);
+    --border-focus: rgba(96, 165, 250, 0.4);
+    --text: #e2e8f0;
+    --text-dim: #94a3b8;
+    --text-muted: #64748b;
+    --primary: #60a5fa;
+    --primary-hover: #93bbfd;
+    --primary-glow: rgba(96, 165, 250, 0.25);
+    --green: #34d399;
+    --red: #f87171;
+    --radius: 16px;
+    --radius-sm: 10px;
+    --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+    --font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+/* ============================================================
+   Reset & Base
+   ============================================================ */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { font-size: 16px; }
+
+body {
+    background: var(--bg);
+    font-family: var(--font-sans);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ============================================================
+   Loading Screen
+   ============================================================ */
+#loading-screen {
+    position: fixed;
+    inset: 0;
+    background: #0a0e1a;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 99999;
+    opacity: 1;
+    transition: opacity 0.5s ease;
+}
+
+.loading-spinner {
+    width: 48px;
+    height: 48px;
+    border: 3px solid rgba(255, 255, 255, 0.08);
+    border-top: 3px solid var(--primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 20px;
+}
+
+.loading-text {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.85rem;
+    letter-spacing: 1px;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+@keyframes pulse {
+    0%, 100% { opacity: 0.4; }
+    50%      { opacity: 1; }
+}
+
+/* ============================================================
+   Background Image Layer
+   ============================================================ */
+#bgImage {
+    position: fixed; inset: 0;
+    z-index: 0;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    opacity: 0;
+    transition: opacity 0.8s ease;
+}
+#bgImage.show { opacity: 1; }
+
+/* Dark overlay on top of bg image for readability */
+#bgImage::after {
+    content: '';
+    position: fixed; inset: 0;
+    background: rgba(10, 14, 26, 0.55);
+    z-index: 0;
+    pointer-events: none;
+}
+
+/* ============================================================
+   Background Canvas (particles)
+   ============================================================ */
+#bgCanvas {
+    position: fixed; inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.5;
+}
+
+/* ============================================================
+   Top HUD Navigation — taller for weather
+   ============================================================ */
+.top-nav {
+    position: fixed; top: 0; left: 0;
+    width: 100%; height: 72px;
+    background: rgba(10, 14, 26, 0.75);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    z-index: 100;
+}
+
+.nav-brand {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    user-select: none;
+}
+
+/* Weather display in top nav — larger and prominent */
+.nav-weather {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    font-size: 1.2rem;
+    color: rgba(255,255,255,0.75);
+    overflow: hidden;
+    white-space: nowrap;
+}
+.weather-loading {
+    color: rgba(255,255,255,0.2);
+    font-size: 1.2rem;
+}
+.weather-now {
+    color: #fff;
+    font-weight: 600;
+    font-size: 1.5rem;
+}
+.weather-city {
+    color: rgba(255,255,255,0.55);
+    font-weight: 500;
+    font-size: 1.05rem;
+    margin-right: 4px;
+}
+.weather-detail {
+    color: rgba(255,255,255,0.45);
+    font-size: 1.15rem;
+}
+.weather-forecast {
+    color: rgba(255,255,255,0.35);
+    font-size: 1.15rem;
+}
+
+/* 经纬度坐标（导航栏最左侧） */
+.weather-coords {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: rgba(255,255,255,0.18);
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+    margin-right: 16px;
+}
+
+@media (max-width: 768px) {
+    .weather-detail { display: none; }
+    .weather-forecast { font-size: 0.9rem; }
+    .nav-weather { gap: 10px; }
+    .weather-now { font-size: 1.1rem; }
+}
+
+@media (max-width: 480px) {
+    .weather-forecast { display: none; }
+}
+
+.nav-actions {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+/* HUD button — subtle, reveals on hover */
+.hud-btn {
+    width: 34px; height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    font-size: 1.1rem;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: var(--transition);
+    color: var(--text-dim);
+    position: relative;
+}
+.hud-btn:hover {
+    background: var(--bg-card);
+    color: var(--text);
+}
+.hud-btn.active {
+    color: var(--primary);
+    background: rgba(96, 165, 250, 0.1);
+}
+
+/* Hamburger */
+.menu-btn {
+    width: 34px; height: 34px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    background: none;
+    border: none;
+    border-radius: 8px;
+    transition: var(--transition);
+}
+.menu-btn:hover { background: var(--bg-card); }
+.menu-btn span {
+    display: block;
+    width: 20px; height: 2px;
+    background: var(--text-dim);
+    border-radius: 2px;
+    transition: var(--transition);
+    transform-origin: center;
+}
+.menu-btn.active span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.menu-btn.active span:nth-child(2) { opacity: 0; transform: scaleX(0); }
+.menu-btn.active span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+/* ============================================================
+   Sidebar
+   ============================================================ */
+.sidebar {
+    position: fixed; top: 0; left: -270px;
+    width: 270px; height: 100vh;
+    background: rgba(10, 14, 26, 0.96);
+    border-right: 1px solid var(--border);
+    padding-top: 72px;
+    transition: left var(--transition);
+    z-index: 99;
+    display: flex;
+    flex-direction: column;
+    will-change: transform;
+}
+.sidebar.show { left: 0; }
+
+.sidebar-menu {
+    list-style: none;
+    flex: 1;
+    padding: 8px;
+}
+
+.sidebar-menu li {
+    padding: 13px 16px;
+    margin-bottom: 2px;
+    font-size: 0.95rem;
+    color: var(--text-dim);
+    cursor: pointer;
+    border-radius: 10px;
+    transition: var(--transition);
+    user-select: none;
+    position: relative;
+}
+.sidebar-menu li:hover { background: var(--bg-card); color: var(--text); }
+.sidebar-menu li.active {
+    background: rgba(96, 165, 250, 0.1);
+    color: var(--primary);
+    font-weight: 600;
+}
+.sidebar-menu li.active::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 50%;
+    transform: translateY(-50%);
+    width: 3px; height: 20px;
+    background: var(--primary);
+    border-radius: 0 3px 3px 0;
+}
+
+/* Sidebar link item (external link) */
+.sidebar-link-item {
+    padding: 0 !important;
+}
+.sidebar-link-item a {
+    display: block;
+    padding: 12px 16px;
+    font-size: 0.95rem;
+    color: var(--text-dim);
+    text-decoration: none;
+    border-radius: 10px;
+    transition: var(--transition);
+}
+.sidebar-link-item a:hover {
+    background: var(--bg-card);
+    color: var(--text);
+}
+
+.sidebar-time {
+    padding: 16px 20px 24px;
+    border-top: 1px solid var(--border);
+    text-align: center;
+}
+.sidebar-time-main {
+    font-family: var(--font-mono);
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: 2px;
+}
+.sidebar-time-date {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+/* ============================================================
+   Overlay
+   ============================================================ */
+.overlay {
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 98;
+    opacity: 0; visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+.overlay.show { opacity: 1; visibility: visible; }
+
+/* ============================================================
+   Main Content
+   ============================================================ */
+.main-content {
+    position: relative;
+    z-index: 1;
+    margin-top: 72px;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.page {
+    display: none;
+    width: 100%;
+    max-width: 720px;
+    padding: 24px;
+    animation: pageIn 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.page.active {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+@keyframes pageIn {
+    from { opacity: 0; transform: translateY(16px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ============================================================
+   Shared Card
+   ============================================================ */
+.page-card {
+    background: var(--bg-card);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 36px 32px;
+    width: 100%;
+    max-width: 520px;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255,255,255,0.02);
+    text-align: center;
+}
+.page-card.wc-wide { max-width: 640px; }
+
+.page-title {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 28px;
+}
+
+/* ============================================================
+   Buttons
+   ============================================================ */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 12px 24px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    font-family: var(--font-sans);
+    border: none;
+    border-radius: 50px;
+    cursor: pointer;
+    transition: var(--transition);
+    user-select: none;
+    white-space: nowrap;
+}
+.btn:active { transform: scale(0.96); }
+
+.btn-primary {
+    background: var(--primary);
+    color: #0a0e1a;
+    box-shadow: 0 4px 20px var(--primary-glow);
+}
+.btn-primary:hover {
+    background: var(--primary-hover);
+    box-shadow: 0 6px 28px var(--primary-glow);
+    transform: translateY(-2px);
+}
+
+.btn-outline {
+    background: transparent;
+    color: var(--primary);
+    border: 1.5px solid rgba(96, 165, 250, 0.25);
+}
+.btn-outline:hover {
+    background: rgba(96, 165, 250, 0.08);
+    border-color: var(--primary);
+}
+
+.btn-ghost {
+    background: transparent;
+    color: var(--text-dim);
+}
+.btn-ghost:hover { background: var(--bg-card); color: var(--text); }
+
+.btn-sm { padding: 6px 14px; font-size: 0.82rem; }
+.btn-full { width: 100%; margin-top: 8px; }
+
+.btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+.btn-row {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+
+/* ============================================================
+   1. Clock Page — pure white, no card, directly on background
+   ============================================================ */
+
+/* Page layout: center everything vertically */
+#page-clock {
+    justify-content: center;
+    gap: clamp(0.25rem, 1.2vh, 2rem);
+    padding-top: 0;
+}
+
+/* Top title — larger, positioned higher */
+.clock-title {
+    font-size: min(2.5vw, 4vh, 1.8rem);
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.55);
+    margin-bottom: clamp(0.5rem, 3vh, 3rem);
+    text-align: center;
+    padding: 4px 20px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    transition: var(--transition);
+    cursor: text;
+    outline: none;
+    letter-spacing: 4px;
+    transform: translateY(-6px);
+}
+.clock-title:hover { border-color: rgba(255,255,255,0.1); }
+.clock-title:focus {
+    border-color: rgba(255,255,255,0.25);
+    background: rgba(255,255,255,0.03);
+    color: rgba(255,255,255,0.8);
+}
+
+/* ---- Clock Font Presets ---- */
+body[data-font="mono"] .time-display,
+body[data-font="mono"] .cd-display,
+body[data-font="mono"] .wc-local-card .wc-time,
+body[data-font="mono"] .wc-city-time,
+body[data-font="mono"] .dc-result-val,
+body[data-font="mono"] .sidebar-time-main {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+}
+
+body[data-font="sans"] .time-display,
+body[data-font="sans"] .cd-display,
+body[data-font="sans"] .wc-local-card .wc-time,
+body[data-font="sans"] .wc-city-time,
+body[data-font="sans"] .dc-result-val,
+body[data-font="sans"] .sidebar-time-main {
+    font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', system-ui, -apple-system, sans-serif;
+}
+
+body[data-font="serif"] .time-display,
+body[data-font="serif"] .cd-display,
+body[data-font="serif"] .wc-local-card .wc-time,
+body[data-font="serif"] .wc-city-time,
+body[data-font="serif"] .dc-result-val,
+body[data-font="serif"] .sidebar-time-main {
+    font-family: 'Noto Serif SC', 'STSong', 'SimSun', 'Songti SC', 'Georgia', serif;
+}
+
+body[data-font="kaiti"] .time-display,
+body[data-font="kaiti"] .cd-display,
+body[data-font="kaiti"] .wc-local-card .wc-time,
+body[data-font="kaiti"] .wc-city-time,
+body[data-font="kaiti"] .dc-result-val,
+body[data-font="kaiti"] .sidebar-time-main {
+    font-family: 'KaiTi', 'STKaiti', '楷体', 'Noto Serif SC', serif;
+}
+
+body[data-font="rounded"] .time-display,
+body[data-font="rounded"] .cd-display,
+body[data-font="rounded"] .wc-local-card .wc-time,
+body[data-font="rounded"] .wc-city-time,
+body[data-font="rounded"] .dc-result-val,
+body[data-font="rounded"] .sidebar-time-main {
+    font-family: 'Varela Round', 'Rounded Mplus 1c', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+/* Time digits — pure white, huge, on background */
+.time-display {
+    font-family: var(--font-mono);
+    font-size: clamp(3rem, min(15vw, 22vh), 16rem);
+    font-weight: 700;
+    letter-spacing: 6px;
+    color: #ffffff;
+    line-height: 1;
+    white-space: nowrap;
+    text-align: center;
+    user-select: none;
+}
+
+.colon {
+    color: rgba(255,255,255,0.35);
+}
+
+.ampm {
+    font-size: 0.25em;
+    color: rgba(255,255,255,0.4);
+    margin-left: 8px;
+    display: none;
+    vertical-align: super;
+}
+.ampm.show { display: inline; }
+
+/* Date row */
+.date-row {
+    font-size: min(3vw, 4.5vh, 2rem);
+    color: rgba(255, 255, 255, 0.5);
+    margin-top: clamp(0.5rem, 2.5vh, 2.5rem);
+    letter-spacing: 2px;
+    white-space: nowrap;
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 2px;
+    flex-wrap: wrap;
+}
+.date-row #weekday {
+    color: rgba(255, 255, 255, 0.5);
+    font-weight: 400;
+}
+.date-sep {
+    color: rgba(255,255,255,0.25);
+    margin: 0 6px;
+}
+
+/* Bottom subtitle */
+.clock-subtitle {
+    font-size: min(1.8vw, 3vh, 1.4rem);
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.35);
+    margin-top: clamp(0.5rem, 2.5vh, 3rem);
+    padding: 4px 16px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    transition: var(--transition);
+    cursor: text;
+    outline: none;
+    letter-spacing: 2px;
+}
+.clock-subtitle:hover { border-color: rgba(255,255,255,0.08); }
+.clock-subtitle:focus {
+    border-color: rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.03);
+    color: rgba(255,255,255,0.6);
+}
+
+/* Motivational quote — subtle at bottom */
+#page-clock .quote-text {
+    font-size: min(1.5vw, 2.5vh, 1.2rem);
+    color: rgba(255, 255, 255, 0.45);
+    font-style: italic;
+    letter-spacing: 0.5px;
+    transition: opacity 0.5s ease;
+    margin-top: clamp(0.5rem, 2vh, 2rem);
+    text-align: center;
+    max-width: 600px;
+    line-height: 1.6;
+}
+
+/* ============================================================
+   2. Countdown
+   ============================================================ */
+.cd-input-row {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+
+.cd-input-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+.cd-input-group input {
+    width: 72px;
+    padding: 12px 8px;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--text);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    outline: none;
+    transition: var(--transition);
+}
+.cd-input-group input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-glow);
+}
+.cd-input-group label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.cd-presets {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+}
+.cd-preset.active {
+    background: rgba(96, 165, 250, 0.15) !important;
+    border-color: var(--primary) !important;
+    color: var(--primary) !important;
+}
+
+.cd-display {
+    font-family: var(--font-mono);
+    font-size: clamp(3rem, 8vw, 5.5rem);
+    font-weight: 700;
+    color: var(--text);
+    margin: 8px 0 24px;
+    letter-spacing: 4px;
+    white-space: nowrap;
+    transition: color 0.3s;
+    text-shadow: 0 0 40px rgba(96, 165, 250, 0.1);
+}
+.cd-display.flash {
+    animation: cdFlash 0.5s ease 6;
+    color: var(--red);
+}
+@keyframes cdFlash {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.2; }
+}
+
+/* ============================================================
+   3. World Clock
+   ============================================================ */
+.wc-local-card {
+    background: rgba(96, 165, 250, 0.06);
+    border: 1px solid rgba(96, 165, 250, 0.12);
+    border-radius: var(--radius);
+    padding: 24px;
+    margin-bottom: 24px;
+    text-align: center;
+}
+.wc-local-card .wc-city {
+    font-size: 0.85rem;
+    color: var(--primary);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+}
+.wc-local-card .wc-time {
+    font-family: var(--font-mono);
+    font-size: 2.8rem;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: 2px;
+    text-shadow: 0 0 30px rgba(96, 165, 250, 0.1);
+}
+.wc-local-card .wc-info {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    margin-top: 8px;
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+}
+
+.wc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+}
+
+.wc-city-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 18px 14px;
+    text-align: center;
+    transition: var(--transition);
+}
+.wc-city-card:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--border-focus);
+    transform: translateY(-2px);
+}
+
+.wc-city-card .wc-city-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 6px;
+}
+.wc-city-card .wc-city-time {
+    font-family: var(--font-mono);
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--primary);
+    letter-spacing: 1px;
+}
+.wc-city-card .wc-city-offset {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+/* ============================================================
+   4. Date Calculator
+   ============================================================ */
+.dc-input-group {
+    text-align: left;
+    margin-bottom: 16px;
+}
+.dc-input-group label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+}
+.dc-input-group input {
+    width: 100%;
+    padding: 12px 16px;
+    font-size: 1rem;
+    color: var(--text);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    outline: none;
+    transition: var(--transition);
+}
+.dc-input-group input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-glow);
+}
+.dc-input-group input::-webkit-calendar-picker-indicator {
+    filter: invert(0.8);
+    cursor: pointer;
+}
+
+.dc-result {
+    margin-top: 20px;
+    padding: 24px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    display: none;
+    animation: fadeIn 0.35s ease;
+}
+.dc-result.show { display: block; }
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.dc-result-item { margin-bottom: 16px; }
+.dc-result-val {
+    font-family: var(--font-mono);
+    font-size: 2.4rem;
+    font-weight: 700;
+    color: var(--primary);
+}
+.dc-result-label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+.dc-result-row {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    justify-content: center;
+    flex-wrap: wrap;
+    font-size: 1rem;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+}
+.dc-result-row .dc-result-val { font-size: 1.6rem; }
+.dc-result-detail {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-top: 8px;
+    line-height: 1.7;
+}
+
+/* ============================================================
+   Settings Modal
+   ============================================================ */
+.modal {
+    display: none;
+    position: fixed; inset: 0;
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+}
+.modal.show { display: flex; }
+
+.modal-backdrop {
+    position: absolute; inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(6px);
+}
+
+.modal-card {
+    position: relative;
+    background: #111827;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    width: 90%;
+    max-width: 420px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+    animation: modalIn 0.35s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+@keyframes modalIn {
+    from { opacity: 0; transform: scale(0.92) translateY(16px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+}
+.modal-header h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text);
+}
+.modal-close {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 1.2rem;
+    cursor: pointer;
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+}
+.modal-close:hover { background: var(--bg-card); color: var(--text); }
+
+.modal-body { padding: 24px; }
+
+.setting-item { margin-bottom: 20px; }
+.setting-item:last-child { margin-bottom: 0; }
+.setting-item label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+}
+.setting-item select,
+.setting-item input[type="text"] {
+    width: 100%;
+    padding: 10px 14px;
+    font-size: 0.95rem;
+    color: var(--text);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    outline: none;
+    transition: var(--transition);
+}
+.setting-item select:focus,
+.setting-item input[type="text"]:focus {
+    border-color: var(--primary);
+}
+.setting-item select {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+}
+.setting-item select option { background: #1e293b; color: var(--text); }
+
+/* Color picker row */
+.setting-color-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+.setting-color-row input[type="text"] { flex: 1; }
+.setting-color-row input[type="color"] {
+    width: 36px; height: 36px;
+    padding: 2px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: transparent;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.setting-color-row input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+.setting-color-row input[type="color"]::-webkit-color-swatch { border-radius: 6px; border: none; }
+
+/* File upload input */
+.setting-color-row input[type="file"] {
+    flex: 1;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+}
+.setting-color-row input[type="file"]::file-selector-button {
+    background: var(--bg-card);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 50px;
+    padding: 6px 14px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    margin-right: 8px;
+    transition: var(--transition);
+}
+.setting-color-row input[type="file"]::file-selector-button:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--primary);
+}
+
+/* ============================================================
+   Transparent UI mode — when background image is active
+   Hide all containers, keep only text + interactive elements
+   ============================================================ */
+body.transparent-ui #bgImage::after {
+    background: rgba(10, 14, 26, 0.35);
+}
+
+/* Top nav: transparent */
+body.transparent-ui .top-nav {
+    background: rgba(10, 14, 26, 0.2);
+    border-bottom-color: rgba(255,255,255,0.04);
+}
+
+/* Sidebar: transparent */
+body.transparent-ui .sidebar {
+    background: rgba(10, 14, 26, 0.25);
+    border-right-color: rgba(255,255,255,0.04);
+}
+
+/* Overlay: lighter */
+body.transparent-ui .overlay {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+/* All page cards: transparent */
+body.transparent-ui .page-card {
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-color: rgba(255,255,255,0.05);
+    box-shadow: none;
+}
+
+/* World clock local card */
+body.transparent-ui .wc-local-card {
+    background: rgba(96, 165, 250, 0.04);
+    border-color: rgba(255,255,255,0.05);
+}
+
+/* World clock city cards */
+body.transparent-ui .wc-city-card {
+    background: rgba(255,255,255,0.02);
+    border-color: rgba(255,255,255,0.04);
+}
+
+/* Input fields: transparent bg */
+body.transparent-ui .cd-input-group input,
+body.transparent-ui .dc-input-group input,
+body.transparent-ui .alarm-time-input {
+    background: rgba(255,255,255,0.03);
+}
+
+/* Date calc result */
+body.transparent-ui .dc-result {
+    background: rgba(255,255,255,0.02);
+}
+
+/* Countdown preset active: keep subtle highlight */
+body.transparent-ui .cd-preset.active {
+    background: rgba(96, 165, 250, 0.1) !important;
+}
+
+/* Settings modal: keep readable */
+body.transparent-ui .modal-card {
+    background: rgba(17, 24, 39, 0.9);
+}
+body.transparent-ui .modal-backdrop {
+    background: rgba(0, 0, 0, 0.5);
+}
+
+/* Sidebar menu hover */
+body.transparent-ui .sidebar-menu li:hover {
+    background: rgba(255,255,255,0.03);
+}
+body.transparent-ui .sidebar-menu li.active {
+    background: rgba(96, 165, 250, 0.08);
+}
+
+/* Sidebar divider */
+body.transparent-ui .sidebar-time {
+    border-top-color: rgba(255,255,255,0.04);
+}
+
+/* HUD buttons hover */
+body.transparent-ui .hud-btn:hover {
+    background: rgba(255,255,255,0.04);
+}
+
+/* ============================================================
+   Scrollbar
+   ============================================================ */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.15); }
+
+/* ============================================================
+   Responsive
+   ============================================================ */
+@media (max-width: 768px) {
+    .page-card { padding: 24px 18px; }
+    .time-display { font-size: clamp(2.5rem, min(12vw, 18vh), 7rem); }
+    .date-row { font-size: min(2.5vw, 3.5vh, 1.3rem); }
+    #page-clock .quote-text { font-size: min(2vw, 2.5vh, 0.95rem); }
+    .wc-grid { grid-template-columns: repeat(2, 1fr); }
+    .cd-input-group input { width: 72px; font-size: 1rem; }
+    .clock-title { font-size: min(2.5vw, 3vh, 1rem); }
+}
+
+@media (max-width: 480px) {
+    .page { padding: 12px; }
+    .page-card { padding: 20px 14px; }
+    .time-display { font-size: clamp(1.8rem, min(10vw, 16vh), 5rem); }
+    .date-row { font-size: min(2.2vw, 3vh, 1.1rem); }
+    .wc-grid { grid-template-columns: 1fr 1fr; }
+    .cd-display { font-size: 2.5rem; }
+    .wc-local-card .wc-time { font-size: 2rem; }
+    .clock-title { font-size: min(2.5vw, 2.5vh, 0.95rem); }
+    .clock-subtitle { font-size: min(2vw, 2.5vh, 0.85rem); }
+}
+
+/* ============================================================
+   页脚 — Footer
+   ============================================================ */
+.footer {
+    background: rgba(10, 14, 26, 0.7);
+    backdrop-filter: blur(10px);
+    color: #aaa;
+    padding: 0.8rem 1.5rem;
+    font-size: 0.85rem;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    margin-top: auto;
+    width: 100%;
+    box-sizing: border-box;
+    position: relative;
+    z-index: 1;
+}
+
+.footer-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+}
+
+.footer-copyright {
+    white-space: nowrap;
+}
+
+.footer-links {
+    display: flex;
+    gap: 1rem;
+    white-space: nowrap;
+}
+
+.footer-links a {
+    color: #6c8eff;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.footer-links a:hover {
+    color: #a0b4ff;
+    text-decoration: underline;
+}
+
+.footer-icp {
+    white-space: nowrap;
+    opacity: 0.7;
+    font-size: 0.8rem;
+}
+
+@media (max-width: 640px) {
+    .footer-content {
+        flex-direction: column;
+        text-align: center;
+        gap: 0.5rem;
+    }
+    .footer-links {
+        justify-content: center;
+    }
+}
+
+/* Transparent UI mode for footer */
+body.transparent-ui .footer {
+    background: rgba(10, 14, 26, 0.2);
+    border-top-color: rgba(255,255,255,0.04);
+}

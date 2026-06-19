@@ -1,0 +1,575 @@
+/**
+ * App — entry point, sidebar navigation, background canvas, fullscreen, quotes
+ */
+(function () {
+    // ---- DOM refs ----
+    const menuBtn    = document.getElementById('menuBtn');
+    const sidebar    = document.getElementById('sidebar');
+    const overlay    = document.getElementById('overlay');
+    const menuItems  = document.querySelectorAll('.sidebar-menu li');
+    const pages      = document.querySelectorAll('.page');
+
+    // settings modal
+    const settingsBtn   = document.getElementById('settingsBtn');
+    const settingsModal = document.getElementById('settingsModal');
+    const modalBackdrop = document.getElementById('modalBackdrop');
+    const modalClose    = document.getElementById('modalClose');
+
+    // fullscreen
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+
+    // loading screen
+    const loadingScreen = document.getElementById('loading-screen');
+
+    let currentPage = 'clock';
+
+    // ---- Sidebar ----
+    function openSidebar() {
+        menuBtn.classList.add('active');
+        sidebar.classList.add('show');
+        overlay.classList.add('show');
+    }
+
+    function closeSidebar() {
+        menuBtn.classList.remove('active');
+        sidebar.classList.remove('show');
+        overlay.classList.remove('show');
+    }
+
+    menuBtn.addEventListener('click', () => {
+        sidebar.classList.contains('show') ? closeSidebar() : openSidebar();
+    });
+    overlay.addEventListener('click', closeSidebar);
+
+    // ---- Page Switching ----
+    function switchPage(pageName) {
+        if (currentPage === pageName) return;
+        currentPage = pageName;
+
+        menuItems.forEach(li => {
+            li.classList.toggle('active', li.dataset.page === pageName);
+        });
+        pages.forEach(p => {
+            p.classList.toggle('active', p.id === `page-${pageName}`);
+        });
+
+        window.dispatchEvent(new CustomEvent('pagechange', { detail: { page: pageName } }));
+    }
+
+    menuItems.forEach(item => {
+        item.addEventListener('click', () => {
+            if (item.dataset.page) {
+                switchPage(item.dataset.page);
+            }
+            closeSidebar();
+        });
+    });
+
+    // ---- Fullscreen ----
+    fullscreenBtn.addEventListener('click', () => {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(() => {});
+            fullscreenBtn.textContent = '⛶';
+        } else {
+            document.exitFullscreen();
+            fullscreenBtn.textContent = '⛶';
+        }
+    });
+    document.addEventListener('fullscreenchange', () => {
+        fullscreenBtn.textContent = document.fullscreenElement ? '⛶' : '⛶';
+        fullscreenBtn.classList.toggle('active', !!document.fullscreenElement);
+    });
+
+    // ---- Settings Modal ----
+    function openSettings() {
+        Settings.syncToDOM();
+        updateBgRows();
+        settingsModal.classList.add('show');
+    }
+    function closeSettings() {
+        settingsModal.classList.remove('show');
+    }
+
+    settingsBtn.addEventListener('click', openSettings);
+    modalBackdrop.addEventListener('click', closeSettings);
+    modalClose.addEventListener('click', closeSettings);
+
+    // ---- Centralized settings UI bindings ----
+    // Each modal control simply calls Settings.set().
+    // All DOM updates happen via the 'settingschange' event listener below.
+    (function bindSettingsControls() {
+        // Simple select/input → direct mapping to settings key
+        const bindings = [
+            { id: 'setHourFormat',   event: 'change', key: 'hourFormat' },
+            { id: 'setQuoteMode',    event: 'change', key: 'quoteMode' },
+            { id: 'setParticles',    event: 'change', key: 'particles' },
+            { id: 'setBgType',       event: 'change', key: 'bgType' },
+            { id: 'setClockTitle',       event: 'input', key: 'clockTitle', fallback: Settings.DEFAULTS.clockTitle },
+            { id: 'setClockSubtitle',    event: 'input', key: 'clockSubtitle', fallback: Settings.DEFAULTS.clockSubtitle },
+            { id: 'setClockTitleColor',  event: 'input', key: 'clockTitleColor' },
+            { id: 'setClockSubtitleColor', event: 'input', key: 'clockSubtitleColor' },
+            { id: 'setClockFont',      event: 'change', key: 'clockFont' },
+        ];
+
+        bindings.forEach(({ id, event, key, fallback }) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener(event, function () {
+                const val = fallback !== undefined
+                    ? (this.value || fallback)
+                    : this.value;
+                Settings.set(key, val);
+            });
+        });
+    })();
+
+    // ---- Background System ----
+    const bgImageEl = document.getElementById('bgImage');
+    const bgUploadRow = document.getElementById('bgUploadRow');
+    const bgFetchRow = document.getElementById('bgFetchRow');
+
+    // Track nature fetch URL in memory (not persisted) so we can re-apply
+    // without re-fetching on every modal open.
+    let _natureImageUrl = null;
+    let _builtinImageUrl = null;
+    let _bgFetchTimer = null;
+
+    function _setBodyTransparent(on) {
+        document.body.classList.toggle('transparent-ui', on);
+    }
+
+    function _showBgImage(url) {
+        if (!bgImageEl) return;
+        bgImageEl.style.backgroundImage = `url(${url})`;
+        bgImageEl.classList.add('show');
+        _setBodyTransparent(true);
+    }
+
+    function _hideBgImage() {
+        if (!bgImageEl) return;
+        bgImageEl.style.backgroundImage = '';
+        bgImageEl.classList.remove('show');
+        _setBodyTransparent(false);
+    }
+
+    /**
+     * Show/hide the upload / fetch helper rows based on current bgType.
+     * Does NOT modify the background image itself.
+     */
+    function updateBgRows() {
+        const type = Settings.get('bgType');
+        if (bgUploadRow) bgUploadRow.style.display = type === 'custom' ? '' : 'none';
+        if (bgFetchRow) bgFetchRow.style.display = type === 'nature' ? '' : 'none';
+    }
+
+    /**
+     * Apply the background according to current settings.
+     * - solid  → hide image, remove transparency
+     * - nature → fetch (or reuse cached) nature image
+     * - custom → use stored base64 (if any), else fall back to solid look
+     */
+    function applyBackground() {
+        if (!bgImageEl) return;
+        const type = Settings.get('bgType');
+
+        if (type === 'solid') {
+            _hideBgImage();
+        } else if (type === 'nature') {
+            // If we already have a fetched URL, re-apply it instantly
+            if (_natureImageUrl) {
+                _showBgImage(_natureImageUrl);
+            }
+            // Fetch a fresh one (debounced so rapid toggles don't spam requests)
+            clearTimeout(_bgFetchTimer);
+            _bgFetchTimer = setTimeout(() => {
+                const url = `https://picsum.photos/1920/1080/?nature,landscape&random=${Date.now()}`;
+                const img = new Image();
+                img.onload = () => {
+                    _natureImageUrl = url;
+                    _showBgImage(url);
+                };
+                img.onerror = () => {
+                    // If fetch fails and we have a cached URL, keep it
+                    if (!_natureImageUrl) _hideBgImage();
+                };
+                img.src = url;
+            }, 150);
+        } else if (type === 'custom') {
+            const dataUrl = Settings.get('bgImage');
+            if (dataUrl) {
+                _showBgImage(dataUrl);
+            } else {
+                _hideBgImage();
+            }
+        } else if (type === 'builtin') {
+            if (_builtinImageUrl) {
+                _showBgImage(_builtinImageUrl);
+            } else {
+                // 使用 photo.linsf.fun 域名的内置图片
+                const builtinUrl = 'https://photo.linsf.fun/photo.jpg';
+                const img = new Image();
+                img.onload = () => {
+                    _builtinImageUrl = builtinUrl;
+                    _showBgImage(builtinUrl);
+                };
+                img.onerror = () => {
+                    console.warn('内置图片加载失败，回退到纯色');
+                    if (!_builtinImageUrl) _hideBgImage();
+                };
+                img.src = builtinUrl;
+            }
+        }
+    }
+
+    // ---- Background-specific UI handlers (not covered by simple key binding) ----
+
+    // File upload for custom background
+    document.getElementById('setBgFile').addEventListener('change', function () {
+        const file = this.files[0];
+        if (!file) return;
+        if (file.size > 2 * 1024 * 1024) {
+            alert('图片太大（超过 2MB），请选择较小的图片。');
+            this.value = '';
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+            Settings.setMultiple({ bgImage: reader.result, bgType: 'custom' });
+        };
+        reader.onerror = () => {
+            alert('图片读取失败，请重试。');
+        };
+        reader.readAsDataURL(file);
+    });
+
+    // "Fetch new nature image" button
+    document.getElementById('setBgFetch').addEventListener('click', function () {
+        // Clear cached nature URL so we always get a fresh image
+        _natureImageUrl = null;
+        // If already on 'nature', force a re-apply (which will re-fetch)
+        if (Settings.get('bgType') === 'nature') {
+            applyBackground();
+        } else {
+            Settings.set('bgType', 'nature');
+        }
+    });
+
+    // "Clear custom background" button
+    document.getElementById('setBgClear').addEventListener('click', function () {
+        Settings.setMultiple({ bgImage: '', bgType: 'solid' });
+        const fileInput = document.getElementById('setBgFile');
+        if (fileInput) fileInput.value = '';
+    });
+
+    // ---- Motivational Quote Rotation ----
+    const quoteTextEl = document.getElementById('quoteText');
+    let quoteTimer = null;
+
+    function updateQuote() {
+        if (!quoteTextEl) return;
+        if (Settings.get('quoteMode') === 'off') {
+            quoteTextEl.style.display = 'none';
+            return;
+        }
+        quoteTextEl.style.display = '';
+        quoteTextEl.style.opacity = '0';
+        setTimeout(() => {
+            quoteTextEl.textContent = Quotes.random();
+            quoteTextEl.style.opacity = '1';
+        }, 500);
+    }
+
+    function startQuoteRotation() {
+        stopQuoteRotation();
+        if (Settings.get('quoteMode') === 'off') {
+            if (quoteTextEl) quoteTextEl.style.display = 'none';
+            return;
+        }
+        if (quoteTextEl) quoteTextEl.style.display = '';
+        updateQuote();
+        quoteTimer = setInterval(updateQuote, 12000);
+    }
+
+    function stopQuoteRotation() {
+        clearInterval(quoteTimer);
+        quoteTimer = null;
+    }
+
+    // ---- Centralized settings change handler ----
+    // All DOM updates driven by Settings.set() happen here.
+    window.addEventListener('settingschange', function (e) {
+        const { key, value } = e.detail;
+
+        switch (key) {
+            case 'hourFormat':
+                // clock.js also listens; nothing extra needed here
+                break;
+
+            case 'clockTitle': {
+                const el = document.getElementById('clockTitle');
+                if (el) el.textContent = value || Settings.DEFAULTS.clockTitle;
+                // Keep modal input in sync if modal is open
+                const input = document.getElementById('setClockTitle');
+                if (input && document.getElementById('settingsModal').classList.contains('show')) {
+                    input.value = value;
+                }
+                break;
+            }
+            case 'clockTitleColor': {
+                const el = document.getElementById('clockTitle');
+                if (el) el.style.color = value;
+                break;
+            }
+            case 'clockSubtitle': {
+                const el = document.getElementById('clockSubtitle');
+                if (el) el.textContent = value || Settings.DEFAULTS.clockSubtitle;
+                const input = document.getElementById('setClockSubtitle');
+                if (input && document.getElementById('settingsModal').classList.contains('show')) {
+                    input.value = value;
+                }
+                break;
+            }
+            case 'clockSubtitleColor': {
+                const el = document.getElementById('clockSubtitle');
+                if (el) el.style.color = value;
+                break;
+            }
+            case 'quoteMode':
+                startQuoteRotation();
+                break;
+
+            case 'particles':
+                updateParticles();
+                break;
+
+            case 'bgType':
+                updateBgRows();
+                // When switching away from nature, clear cached nature URL
+                if (value !== 'nature') _natureImageUrl = null;
+                if (value !== 'builtin') _builtinImageUrl = null;
+                applyBackground();
+                // Keep select in sync (in case change came from outside the modal)
+                const bgTypeEl = document.getElementById('setBgType');
+                if (bgTypeEl && bgTypeEl.value !== value) bgTypeEl.value = value;
+                break;
+
+            case 'bgImage':
+                // Only re-apply if currently on 'custom' type
+                if (Settings.get('bgType') === 'custom') {
+                    applyBackground();
+                }
+                break;
+
+            case 'clockFont':
+                document.body.setAttribute('data-font', value);
+                break;
+        }
+    });
+
+    // ---- Background Particle Canvas ----
+    const canvas = document.getElementById('bgCanvas');
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+    let animId;
+
+    function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+
+    function createParticles() {
+        const count = Math.floor((canvas.width * canvas.height) / 12000);
+        particles = [];
+        for (let i = 0; i < count; i++) {
+            particles.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                r: Math.random() * 1.2 + 0.3,
+                vx: (Math.random() - 0.5) * 0.3,
+                vy: (Math.random() - 0.5) * 0.3,
+                alpha: Math.random() * 0.5 + 0.2,
+            });
+        }
+    }
+
+    function drawParticles() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // 粒子关闭时停止循环，避免空转消耗 CPU
+        if (Settings.get('particles') !== 'on') {
+            animId = null;
+            return;
+        }
+
+        for (const p of particles) {
+            p.x += p.vx;
+            p.y += p.vy;
+            if (p.x < 0) p.x = canvas.width;
+            if (p.x > canvas.width) p.x = 0;
+            if (p.y < 0) p.y = canvas.height;
+            if (p.y > canvas.height) p.y = 0;
+
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(255,255,255,${p.alpha})`;
+            ctx.fill();
+        }
+
+        for (let i = 0; i < particles.length; i++) {
+            for (let j = i + 1; j < particles.length; j++) {
+                const dx = particles[i].x - particles[j].x;
+                const dy = particles[i].y - particles[j].y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < 120) {
+                    ctx.beginPath();
+                    ctx.moveTo(particles[i].x, particles[i].y);
+                    ctx.lineTo(particles[j].x, particles[j].y);
+                    ctx.strokeStyle = `rgba(255,255,255,${0.04 * (1 - dist / 120)})`;
+                    ctx.lineWidth = 0.5;
+                    ctx.stroke();
+                }
+            }
+        }
+        animId = requestAnimationFrame(drawParticles);
+    }
+
+    function updateParticles() {
+        if (Settings.get('particles') === 'off') {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        } else {
+            // Restart the animation loop if it was stopped
+            cancelAnimationFrame(animId);
+            drawParticles();
+        }
+    }
+
+    window.addEventListener('resize', () => {
+        resizeCanvas();
+        createParticles();
+    });
+
+    // ---- Sidebar clock ----
+    function updateSidebarClock() {
+        const now = new Date();
+        const h = String(now.getHours()).padStart(2, '0');
+        const m = String(now.getMinutes()).padStart(2, '0');
+        const s = String(now.getSeconds()).padStart(2, '0');
+        document.getElementById('sidebarTime').textContent = `${h}:${m}:${s}`;
+        document.getElementById('sidebarDate').textContent =
+            `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}`;
+    }
+
+    // ---- Init ----
+    function init() {
+        const s = Settings.load();
+
+        // Apply clock title (top)
+        const clockTitleEl = document.getElementById('clockTitle');
+        if (clockTitleEl) {
+            if (s.clockTitle) clockTitleEl.textContent = s.clockTitle;
+            if (s.clockTitleColor) clockTitleEl.style.color = s.clockTitleColor;
+        }
+
+        // Apply clock subtitle (bottom)
+        const clockSubtitleEl = document.getElementById('clockSubtitle');
+        if (clockSubtitleEl) {
+            if (s.clockSubtitle) clockSubtitleEl.textContent = s.clockSubtitle;
+            if (s.clockSubtitleColor) clockSubtitleEl.style.color = s.clockSubtitleColor;
+        }
+
+        // Apply font
+        document.body.setAttribute('data-font', s.clockFont || 'mono');
+
+        // Apply background
+        applyBackground();
+        updateBgRows();
+
+        // Particles
+        resizeCanvas();
+        createParticles();
+        drawParticles();
+
+        // Footer year
+        const yearEl = document.getElementById('currentYear');
+        if (yearEl) yearEl.textContent = String(new Date().getFullYear());
+
+        // Sidebar clock
+        updateSidebarClock();
+        setInterval(updateSidebarClock, 1000);
+
+        // Quotes
+        startQuoteRotation();
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                if (settingsModal.classList.contains('show')) closeSettings();
+            }
+            if (e.key === 'f' && e.ctrlKey) {
+                e.preventDefault();
+                fullscreenBtn.click();
+            }
+        });
+
+        // ---- Auto-save helpers for editable title/subtitle ----
+        let titleSaveTimer = null;
+        let subtitleSaveTimer = null;
+
+        function saveClockTitle() {
+            clearTimeout(titleSaveTimer);
+            titleSaveTimer = setTimeout(() => {
+                const text = clockTitleEl.textContent.trim() || Settings.DEFAULTS.clockTitle;
+                Settings.set('clockTitle', text);
+            }, 300);
+        }
+
+        function saveClockSubtitle() {
+            clearTimeout(subtitleSaveTimer);
+            subtitleSaveTimer = setTimeout(() => {
+                const text = clockSubtitleEl.textContent.trim() || Settings.DEFAULTS.clockSubtitle;
+                Settings.set('clockSubtitle', text);
+            }, 300);
+        }
+
+        // Auto-save on every keystroke (debounced 300ms)
+        clockTitleEl.addEventListener('input', saveClockTitle);
+        clockSubtitleEl.addEventListener('input', saveClockSubtitle);
+
+        // Final save + trim on blur
+        clockTitleEl.addEventListener('blur', () => {
+            clearTimeout(titleSaveTimer);
+            const text = clockTitleEl.textContent.trim() || Settings.DEFAULTS.clockTitle;
+            Settings.set('clockTitle', text);
+            clockTitleEl.textContent = text;
+        });
+        clockTitleEl.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); clockTitleEl.blur(); }
+        });
+
+        clockSubtitleEl.addEventListener('blur', () => {
+            clearTimeout(subtitleSaveTimer);
+            const text = clockSubtitleEl.textContent.trim() || Settings.DEFAULTS.clockSubtitle;
+            Settings.set('clockSubtitle', text);
+            clockSubtitleEl.textContent = text;
+        });
+        clockSubtitleEl.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); clockSubtitleEl.blur(); }
+        });
+
+        // Hide loading screen once weather is ready (or timeout after 8s)
+        let loadingHidden = false;
+        function hideLoading() {
+            if (loadingHidden || !loadingScreen) return;
+            loadingHidden = true;
+            loadingScreen.style.opacity = '0';
+            loadingScreen.style.transition = 'opacity 0.5s ease';
+            setTimeout(() => {
+                if (loadingScreen) loadingScreen.style.display = 'none';
+            }, 500);
+        }
+        window.addEventListener('weatherready', hideLoading, { once: true });
+        // Fallback: hide after 8 seconds even if weather hasn't loaded
+        setTimeout(hideLoading, 8000);
+    }
+
+    init();
+})();

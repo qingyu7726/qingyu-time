@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>轻语的全屏时钟</title>
+    <meta name="description" content="沉浸式时钟是一款简洁美观的全屏数字时钟与时间管理应用，支持全屏时钟、倒计时、世界时钟与日期计算，适合教室投屏与专注学习。">
+    <meta name="keywords" content="沉浸式时钟,全屏时钟,数字时钟,倒计时,时间管理,全屏显示,教室投屏,世界时钟,日期计算,专注学习,电子时钟">
+    <meta name="author" content="Clock App">
+    <meta name="theme-color" content="#0a0e1a">
+    <meta name="robots" content="index, follow">
+    <meta property="og:title" content="沉浸式时钟 - 全屏专注时钟⏰｜倒计时·世界时钟·日期计算">
+    <meta property="og:description" content="沉浸式时钟是一款简洁美观的全屏数字时钟与时间管理应用，支持全屏时钟、倒计时、世界时钟与日期计算。">
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="zh_CN">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="沉浸式时钟 - 全屏专注时钟⏰｜倒计时·世界时钟·日期计算">
+    <meta name="twitter:description" content="沉浸式时钟是一款简洁美观的全屏数字时钟与时间管理应用，支持全屏时钟、倒计时、世界时钟与日期计算。">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="icon" href="logo.png">
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <!-- 加载动画 -->
+    <div id="loading-screen">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">沉浸式时钟加载中...</div>
+    </div>
+
+    <!-- 背景图片层 -->
+    <div id="bgImage"></div>
+    <!-- 动态背景粒子 -->
+    <canvas id="bgCanvas"></canvas>
+
+    <!-- 顶部 HUD 导航栏 -->
+    <nav class="top-nav" id="topNav">
+        <button class="menu-btn" id="menuBtn" aria-label="菜单">
+            <span></span><span></span><span></span>
+        </button>
+        <div class="nav-weather" id="navWeather">
+            <span class="weather-loading">⏳ 获取天气中...</span>
+        </div>
+        <div class="nav-actions">
+            <button class="hud-btn" id="fullscreenBtn" aria-label="全屏" title="全屏模式">⛶</button>
+            <button class="hud-btn" id="settingsBtn" aria-label="设置" title="设置">⚙</button>
+        </div>
+    </nav>
+
+    <!-- 侧边栏 -->
+    <aside class="sidebar" id="sidebar">
+        <ul class="sidebar-menu">
+            <li class="active" data-page="clock">全屏时钟</li>
+            <li data-page="countdown">倒计时</li>
+            <li data-page="worldclock">世界时钟</li>
+            <li data-page="datecalc">日期计算</li>
+        </ul>
+        <div class="sidebar-time">
+            <div class="sidebar-time-main" id="sidebarTime">00:00:00</div>
+            <div class="sidebar-time-date" id="sidebarDate">2026/05/30</div>
+        </div>
+    </aside>
+
+    <!-- 遮罩层 -->
+    <div class="overlay" id="overlay"></div>
+
+    <!-- ==================== 主内容区 ==================== -->
+    <main class="main-content" id="mainContent">
+
+        <!-- 1. 全屏时钟 -->
+        <section class="page active" id="page-clock">
+            <div class="clock-title" id="clockTitle" contenteditable="true">沉浸式时钟</div>
+            <div class="time-display">
+                <span id="hours">00</span><span class="colon">:</span>
+                <span id="minutes">00</span><span class="colon">:</span>
+                <span id="seconds">00</span>
+                <span id="ampm" class="ampm"></span>
+            </div>
+            <div class="date-row">
+                <span id="year">2026年</span>
+                <span id="month">一月</span>
+                <span id="date">00</span>日
+                <span class="date-sep">·</span>
+                <span id="weekday">星期一</span>
+            </div>
+            <div class="clock-subtitle" id="clockSubtitle" contenteditable="true">专注此刻，不负时光</div>
+            <div class="quote-text" id="quoteText"></div>
+        </section>
+
+        <!-- 2. 倒计时 -->
+        <section class="page" id="page-countdown">
+            <div class="page-card">
+                <h2 class="page-title">⏳ 倒计时</h2>
+                <div class="cd-input-row">
+                    <div class="cd-input-group">
+                        <input type="number" id="cdHours" value="0" min="0" max="99" placeholder="时">
+                        <label>时</label>
+                    </div>
+                    <div class="cd-input-group">
+                        <input type="number" id="cdMinutes" value="5" min="0" max="59" placeholder="分">
+                        <label>分</label>
+                    </div>
+                    <div class="cd-input-group">
+                        <input type="number" id="cdSeconds" value="0" min="0" max="59" placeholder="秒">
+                        <label>秒</label>
+                    </div>
+                </div>
+                <div class="cd-presets">
+                    <button class="btn btn-sm btn-outline cd-preset" data-sec="60">1分</button>
+                    <button class="btn btn-sm btn-outline cd-preset" data-sec="180">3分</button>
+                    <button class="btn btn-sm btn-outline cd-preset active" data-sec="300">5分</button>
+                    <button class="btn btn-sm btn-outline cd-preset" data-sec="600">10分</button>
+                    <button class="btn btn-sm btn-outline cd-preset" data-sec="1800">30分</button>
+                </div>
+                <div class="cd-display" id="cdDisplay">05:00</div>
+                <div class="btn-row">
+                    <button class="btn btn-primary" id="cdStart">开始</button>
+                    <button class="btn btn-ghost" id="cdReset">重置</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 3. 世界时钟 -->
+        <section class="page" id="page-worldclock">
+            <div class="page-card wc-wide">
+                <h2 class="page-title">世界时钟</h2>
+                <div class="wc-local-card">
+                    <div class="wc-city">本地时间</div>
+                    <div class="wc-time" id="wcLocalTime">00:00:00</div>
+                    <div class="wc-info">
+                        <span id="wcLocalDate">2026/05/30</span>
+                        <span id="wcLocalOffset">UTC+8</span>
+                    </div>
+                </div>
+                <div class="wc-grid" id="wcGrid"></div>
+            </div>
+        </section>
+
+
+        <!-- 4. 日期计算器 -->
+        <section class="page" id="page-datecalc">
+            <div class="page-card">
+                <h2 class="page-title">日期计算</h2>
+                <div class="dc-input-group">
+                    <label>开始日期</label>
+                    <input type="date" id="dcStart">
+                </div>
+                <div class="dc-input-group">
+                    <label>结束日期</label>
+                    <input type="date" id="dcEnd">
+                </div>
+                <div class="btn-row">
+                    <button class="btn btn-outline btn-sm" id="dcTodayStart">今天→开始</button>
+                    <button class="btn btn-outline btn-sm" id="dcTodayEnd">今天→结束</button>
+                </div>
+                <button class="btn btn-primary btn-full" id="dcCalc">计算差距</button>
+                <div class="dc-result" id="dcResult">
+                    <div class="dc-result-item">
+                        <span class="dc-result-val" id="dcTotalDays">0</span>
+                        <span class="dc-result-label">总天数</span>
+                    </div>
+                    <div class="dc-result-row">
+                        <span class="dc-result-val" id="dcYears">0</span><span>年</span>
+                        <span class="dc-result-val" id="dcMonths">0</span><span>月</span>
+                        <span class="dc-result-val" id="dcDays">0</span><span>日</span>
+                    </div>
+                    <div class="dc-result-detail" id="dcDetail"></div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ==================== 设置弹窗 ==================== -->
+    <div class="modal" id="settingsModal">
+        <div class="modal-backdrop" id="modalBackdrop"></div>
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>⚙ 设置</h3>
+                <button class="modal-close" id="modalClose">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-item">
+                    <label>时钟格式</label>
+                    <select id="setHourFormat">
+                        <option value="24">24 小时制</option>
+                        <option value="12">12 小时制</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label>时钟字体</label>
+                    <select id="setClockFont">
+                        <option value="mono">等宽数字</option>
+                        <option value="sans">无衬线黑体</option>
+                        <option value="serif">衬线宋体</option>
+                        <option value="kaiti">楷体</option>
+                        <option value="rounded">圆体</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label>上方标题</label>
+                    <div class="setting-color-row">
+                        <input type="text" id="setClockTitle" placeholder="输入标题文字" maxlength="30">
+                        <input type="color" id="setClockTitleColor" title="标题颜色">
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <label>下方副标题</label>
+                    <div class="setting-color-row">
+                        <input type="text" id="setClockSubtitle" placeholder="输入副标题" maxlength="60">
+                        <input type="color" id="setClockSubtitleColor" title="副标题颜色">
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <label>励志语录</label>
+                    <select id="setQuoteMode">
+                        <option value="rotate">轮播展示</option>
+                        <option value="off">关闭</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label>背景粒子</label>
+                    <select id="setParticles">
+                        <option value="on">开启</option>
+                        <option value="off">关闭</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label>背景样式</label>
+                    <select id="setBgType">
+                        <option value="solid">纯色深蓝</option>
+                        <option value="nature">随机自然风景</option>
+                        <option value="custom">本地上传</option>
+                        <option value="builtin">指定图片（内置）</option>
+                    </select>
+                </div>
+                <div class="setting-item" id="bgUploadRow" style="display:none">
+                    <label>上传背景图片</label>
+                    <div class="setting-color-row">
+                        <input type="file" id="setBgFile" accept="image/*">
+                        <button class="btn btn-sm btn-outline" id="setBgClear">清除</button>
+                    </div>
+                </div>
+                <div class="setting-item" id="bgFetchRow" style="display:none">
+                    <button class="btn btn-sm btn-outline btn-full" id="setBgFetch">🔄 换一张自然风景</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 页脚 ==================== -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-copyright">
+                © 2025-<span id="currentYear"></span> 轻语的全屏时钟
+            </div>
+            <div class="footer-links">
+                <span>前端：S C H I N A</span>
+                <span>运营：轻雨</span>
+                <a href="#"></a>
+            </div>
+            <div class="footer-icp">xxx</div>
+        </div>
+    </footer>
+
+    <!-- ==================== JS 模块 ==================== -->
+    <script src="js/settings.js"></script>
+    <script src="js/quotes.js"></script>
+    <script src="js/weather.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/clock.js"></script>
+    <script src="js/countdown.js"></script>
+    <script src="js/worldclock.js"></script>
+    <script src="js/datecalc.js"></script>
+
+</body>
+</html>
